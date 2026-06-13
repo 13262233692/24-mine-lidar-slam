@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="D:\SOLO-11\24-mine-lidar-slam\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\src\point_cloud_source.cpp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\src\voxel_filter.cpp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\src\ndt_registration.cpp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\src\factor_graph_optimizer.cpp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\src\map_builder.cpp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\src\config_parser.cpp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\src\main.cpp">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\include\common_types.h">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\include\point_cloud_source.h">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\include\voxel_filter.h">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\include\ndt_registration.h">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\include\factor_graph_optimizer.h">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\include\map_builder.h">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\include\config_parser.h">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="D:\SOLO-11\24-mine-lidar-slam\include\timer.h">
+      <Filter>Header Files</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{A0EB4B26-62EC-35C3-A34E-0EA8280B0D5B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{60DB672A-EC42-3D9B-ACC0-814ADFC5940B}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

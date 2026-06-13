@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="D:\SOLO-11\24-mine-lidar-slam\build\CMakeFiles\708b7cecaaef062ff3b204c7fd46a298\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{85708985-4459-35E4-9BA9-A43D1104442A}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

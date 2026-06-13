@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/SOLO-11/24-mine-lidar-slam/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
