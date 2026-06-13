@@ -2,7 +2,6 @@
 
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
-#include <pcl/registration/ndt.h>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <memory>
@@ -16,6 +15,26 @@ using PointT = pcl::PointXYZI;
 using PointCloud = pcl::PointCloud<PointT>;
 using PointCloudPtr = PointCloud::Ptr;
 using PointCloudConstPtr = PointCloud::ConstPtr;
+
+struct DegeneracyInfo {
+    bool is_degenerate = false;
+    double min_eigenvalue = 0.0;
+    double condition_number = 0.0;
+    double damping_lambda = 0.0;
+    int degenerate_dimensions = 0;
+    Eigen::Matrix<double, 6, 1> eigenvalues = Eigen::Matrix<double, 6, 1>::Zero();
+    Eigen::Matrix<double, 6, 6> eigenvectors = Eigen::Matrix<double, 6, 6>::Identity();
+
+    void reset() {
+        is_degenerate = false;
+        min_eigenvalue = 0.0;
+        condition_number = 0.0;
+        damping_lambda = 0.0;
+        degenerate_dimensions = 0;
+        eigenvalues.setZero();
+        eigenvectors.setIdentity();
+    }
+};
 
 struct Pose3D {
     Eigen::Vector3d translation;
@@ -74,6 +93,7 @@ struct RegistrationResult {
     double fitness_score;
     size_t iterations;
     Eigen::Matrix4d transformation;
+    DegeneracyInfo degeneracy;
 
     RegistrationResult()
         : converged(false)
@@ -92,6 +112,7 @@ struct KeyFrame {
 };
 
 using KeyFramePtr = std::shared_ptr<KeyFrame>;
+using KeyFrameConstPtr = std::shared_ptr<const KeyFrame>;
 
 struct TrajectoryPoint {
     size_t frame_id;

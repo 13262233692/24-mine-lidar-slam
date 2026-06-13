@@ -19,6 +19,16 @@ struct SLAMConfig {
     int ndt_max_iterations;
     double ndt_transformation_epsilon;
 
+    double lm_lambda_init;
+    double lm_lambda_factor;
+    double lm_lambda_min;
+    double lm_lambda_max;
+    double lm_eigenvalue_threshold;
+    double lm_max_translation_step;
+    double lm_max_rotation_step;
+    double lm_covariance_regularization;
+    int lm_min_cell_points;
+
     double keyframe_translation_threshold;
     double keyframe_rotation_threshold;
 
@@ -52,6 +62,15 @@ struct SLAMConfig {
         , ndt_step_size(0.1)
         , ndt_max_iterations(35)
         , ndt_transformation_epsilon(0.01)
+        , lm_lambda_init(0.01)
+        , lm_lambda_factor(10.0)
+        , lm_lambda_min(1e-8)
+        , lm_lambda_max(1e6)
+        , lm_eigenvalue_threshold(0.01)
+        , lm_max_translation_step(1.0)
+        , lm_max_rotation_step(0.2)
+        , lm_covariance_regularization(0.001)
+        , lm_min_cell_points(6)
         , keyframe_translation_threshold(1.0)
         , keyframe_rotation_threshold(0.05)
         , loop_detection_enabled(false)

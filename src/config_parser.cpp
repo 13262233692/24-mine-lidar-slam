@@ -28,6 +28,16 @@ bool ConfigParser::parseCommandLine(int argc, char** argv, SLAMConfig& config) {
              "NDT step size")
             ("ndt-iter", po::value<int>(&config.ndt_max_iterations),
              "NDT max iterations")
+            ("lm-lambda", po::value<double>(&config.lm_lambda_init),
+             "L-M initial damping lambda")
+            ("lm-factor", po::value<double>(&config.lm_lambda_factor),
+             "L-M lambda increase/decrease factor")
+            ("lm-eigen-thresh", po::value<double>(&config.lm_eigenvalue_threshold),
+             "L-M eigenvalue singularity threshold")
+            ("lm-max-trans", po::value<double>(&config.lm_max_translation_step),
+             "L-M max translation step (meters)")
+            ("lm-max-rot", po::value<double>(&config.lm_max_rotation_step),
+             "L-M max rotation step (radians)")
             ("kf-trans", po::value<double>(&config.keyframe_translation_threshold),
              "keyframe translation threshold (meters)")
             ("kf-rot", po::value<double>(&config.keyframe_rotation_threshold),
@@ -90,6 +100,14 @@ void ConfigParser::printConfig(const SLAMConfig& config) const {
     std::cout << "NDT resolution: " << config.ndt_resolution << " m" << std::endl;
     std::cout << "NDT step size: " << config.ndt_step_size << std::endl;
     std::cout << "NDT max iterations: " << config.ndt_max_iterations << std::endl;
+    std::cout << std::endl;
+    std::cout << "L-M initial lambda: " << config.lm_lambda_init << std::endl;
+    std::cout << "L-M lambda factor: " << config.lm_lambda_factor << std::endl;
+    std::cout << "L-M eigenvalue threshold: " << config.lm_eigenvalue_threshold << std::endl;
+    std::cout << "L-M max translation step: " << config.lm_max_translation_step << " m" << std::endl;
+    std::cout << "L-M max rotation step: " << config.lm_max_rotation_step << " rad" << std::endl;
+    std::cout << "L-M covariance regularization: " << config.lm_covariance_regularization << std::endl;
+    std::cout << "L-M min cell points: " << config.lm_min_cell_points << std::endl;
     std::cout << std::endl;
     std::cout << "Keyframe translation threshold: "
               << config.keyframe_translation_threshold << " m" << std::endl;

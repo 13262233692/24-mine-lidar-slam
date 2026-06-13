@@ -49,6 +49,20 @@ bool MapBuilder::initialize(const SLAMConfig& config) {
     ndt_registration_->setMaxIterations(config.ndt_max_iterations);
     ndt_registration_->setTransformationEpsilon(config.ndt_transformation_epsilon);
 
+    NDTRegistration::LMParams lm_params;
+    lm_params.lambda_init = config.lm_lambda_init;
+    lm_params.lambda_factor = config.lm_lambda_factor;
+    lm_params.lambda_min = config.lm_lambda_min;
+    lm_params.lambda_max = config.lm_lambda_max;
+    lm_params.eigenvalue_threshold = config.lm_eigenvalue_threshold;
+    lm_params.max_translation_step = config.lm_max_translation_step;
+    lm_params.max_rotation_step = config.lm_max_rotation_step;
+    lm_params.covariance_regularization = config.lm_covariance_regularization;
+    lm_params.min_cell_points = config.lm_min_cell_points;
+    lm_params.max_iterations = config.ndt_max_iterations;
+    lm_params.convergence_delta = config.ndt_transformation_epsilon;
+    ndt_registration_->setLMParams(lm_params);
+
     optimizer_ = std::make_shared<FactorGraphOptimizer>();
     optimizer_->setMaxIterations(config.optimizer_max_iterations);
     optimizer_->setOptimizerType("levenberg_marquardt");
@@ -162,7 +176,34 @@ bool MapBuilder::processFrame(LidarScanPtr scan) {
         return false;
     }
 
-    current_pose_ = Pose3D::fromMatrix(result.transformation);
+    if (result.degeneracy.is_degenerate) {
+        std::cerr << "[MapBuilder] DEGENERATE frame=" << scan->frame_id
+                  << " dims=" << result.degeneracy.degenerate_dimensions
+                  << " min_eigenval=" << std::scientific << result.degeneracy.min_eigenvalue
+                  << " lambda=" << result.degeneracy.damping_lambda
+                  << std::fixed << std::endl;
+
+        if (result.degeneracy.degenerate_dimensions >= 3) {
+            std::cerr << "[MapBuilder] Severe degeneracy (" 
+                      << result.degeneracy.degenerate_dimensions
+                      << " dims), clamping pose to last keyframe + odometry" << std::endl;
+            
+            Eigen::Vector3d delta_trans = current_pose_.translation - last_keyframe_pose_.translation;
+            double clamp_dist = std::min(delta_trans.norm(), config_.keyframe_translation_threshold * 0.5);
+            if (delta_trans.norm() > 1e-6) {
+                delta_trans = delta_trans.normalized() * clamp_dist;
+            }
+            
+            Pose3D clamped_pose;
+            clamped_pose.translation = last_keyframe_pose_.translation + delta_trans;
+            clamped_pose.rotation = current_pose_.rotation;
+            current_pose_ = clamped_pose;
+        } else {
+            current_pose_ = Pose3D::fromMatrix(result.transformation);
+        }
+    } else {
+        current_pose_ = Pose3D::fromMatrix(result.transformation);
+    }
 
     TrajectoryPoint traj_point;
     traj_point.frame_id = scan->frame_id;
