@@ -67,6 +67,7 @@ set(HEADERS
     include/voxel_filter.h
     include/ndt_registration.h
     include/factor_graph_optimizer.h
+    include/imu_preintegration.h
     include/map_builder.h
     include/config_parser.h
     include/timer.h
@@ -77,6 +78,7 @@ set(SOURCES
     src/voxel_filter.cpp
     src/ndt_registration.cpp
     src/factor_graph_optimizer.cpp
+    src/imu_preintegration.cpp
     src/map_builder.cpp
     src/config_parser.cpp
     src/main.cpp

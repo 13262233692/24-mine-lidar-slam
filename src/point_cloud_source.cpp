@@ -5,6 +5,8 @@
 #include <sstream>
 #include <iostream>
 #include <iomanip>
+#include <fstream>
+#include <cmath>
 
 namespace fs = std::filesystem;
 
@@ -118,6 +120,76 @@ bool PCDDirectorySource::scanDirectory(const std::string& dir_path) {
     }
 }
 
+CSVIMUDataSource::CSVIMUDataSource()
+    : loaded_(false) {}
+
+CSVIMUDataSource::~CSVIMUDataSource() {
+    close();
+}
+
+bool CSVIMUDataSource::open(const std::string& path) {
+    if (!fs::exists(path)) {
+        std::cerr << "[IMUSource] File not found: " << path << std::endl;
+        return false;
+    }
+
+    measurements_.clear();
+    loaded_ = false;
+
+    std::cout << "[IMUSource] Opening IMU data: " << path << std::endl;
+    return true;
+}
+
+void CSVIMUDataSource::close() {
+    measurements_.clear();
+    loaded_ = false;
+}
+
+bool CSVIMUDataSource::loadAll() {
+    if (loaded_) return true;
+
+    std::cerr << "[IMUSource] loadAll() requires a file path, use open() first" << std::endl;
+    return false;
+}
+
+std::vector<IMUMeasurement> CSVIMUDataSource::getMeasurementsBetween(
+    uint64_t start_ts, uint64_t end_ts) const {
+
+    std::vector<IMUMeasurement> result;
+
+    auto low = std::lower_bound(measurements_.begin(), measurements_.end(),
+        start_ts, [](const IMUMeasurement& m, uint64_t ts) {
+            return m.timestamp < ts;
+        });
+
+    auto high = std::upper_bound(measurements_.begin(), measurements_.end(),
+        end_ts, [](uint64_t ts, const IMUMeasurement& m) {
+            return ts < m.timestamp;
+        });
+
+    for (auto it = low; it != high; ++it) {
+        result.push_back(*it);
+    }
+
+    return result;
+}
+
+const std::vector<IMUMeasurement>& CSVIMUDataSource::getAllMeasurements() const {
+    return measurements_;
+}
+
+size_t CSVIMUDataSource::totalMeasurements() const {
+    return measurements_.size();
+}
+
+bool CSVIMUDataSource::hasTimestamp(uint64_t ts) const {
+    auto it = std::lower_bound(measurements_.begin(), measurements_.end(),
+        ts, [](const IMUMeasurement& m, uint64_t t) {
+            return m.timestamp < t;
+        });
+    return it != measurements_.end() && it->timestamp == ts;
+}
+
 PointCloudSourcePtr PointCloudSourceFactory::create(DataSourceType type) {
     switch (type) {
         case DataSourceType::PCD_DIR:
@@ -142,6 +214,10 @@ PointCloudSourcePtr PointCloudSourceFactory::createFromPath(const std::string& p
     }
 
     return std::make_shared<PCDDirectorySource>();
+}
+
+IMUDataSourcePtr PointCloudSourceFactory::createIMUSource() {
+    return std::make_shared<CSVIMUDataSource>();
 }
 
 } // namespace mine_slam

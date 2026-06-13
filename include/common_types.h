@@ -126,4 +126,39 @@ enum class DataSourceType {
     UNKNOWN
 };
 
+struct IMUMeasurement {
+    uint64_t timestamp = 0;
+    Eigen::Vector3d accel = Eigen::Vector3d::Zero();
+    Eigen::Vector3d gyro = Eigen::Vector3d::Zero();
+};
+
+using IMUMeasurementPtr = std::shared_ptr<IMUMeasurement>;
+
+struct NavState {
+    Eigen::Vector3d position = Eigen::Vector3d::Zero();
+    Eigen::Vector3d velocity = Eigen::Vector3d::Zero();
+    Eigen::Quaterniond rotation = Eigen::Quaterniond::Identity();
+    Eigen::Vector3d accel_bias = Eigen::Vector3d::Zero();
+    Eigen::Vector3d gyro_bias = Eigen::Vector3d::Zero();
+
+    NavState() = default;
+
+    Pose3D toPose3D() const {
+        return Pose3D(position, rotation);
+    }
+
+    static NavState fromPose3D(const Pose3D& pose,
+                                const Eigen::Vector3d& vel = Eigen::Vector3d::Zero(),
+                                const Eigen::Vector3d& ab = Eigen::Vector3d::Zero(),
+                                const Eigen::Vector3d& gb = Eigen::Vector3d::Zero()) {
+        NavState ns;
+        ns.position = pose.translation;
+        ns.rotation = pose.rotation;
+        ns.velocity = vel;
+        ns.accel_bias = ab;
+        ns.gyro_bias = gb;
+        return ns;
+    }
+};
+
 } // namespace mine_slam

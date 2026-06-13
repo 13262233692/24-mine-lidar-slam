@@ -48,6 +48,30 @@ bool ConfigParser::parseCommandLine(int argc, char** argv, SLAMConfig& config) {
              "save final point cloud map")
             ("save-traj", po::value<bool>(&config.save_trajectory),
              "save trajectory file")
+            ("imu-enabled", po::value<bool>(&config.imu_enabled),
+             "enable IMU preintegration fusion")
+            ("imu-data", po::value<std::string>(&config.imu_data_path),
+             "path to IMU data file (CSV)")
+            ("imu-accel-noise", po::value<double>(&config.imu_accel_noise),
+             "IMU accelerometer noise sigma (m/s^2/sqrt(Hz))")
+            ("imu-gyro-noise", po::value<double>(&config.imu_gyro_noise),
+             "IMU gyroscope noise sigma (rad/s/sqrt(Hz))")
+            ("imu-accel-bias-rw", po::value<double>(&config.imu_accel_bias_rw),
+             "IMU accel bias random walk sigma")
+            ("imu-gyro-bias-rw", po::value<double>(&config.imu_gyro_bias_rw),
+             "IMU gyro bias random walk sigma")
+            ("imu-gravity-x", po::value<double>(&config.imu_gravity_x),
+             "gravity vector X component (m/s^2)")
+            ("imu-gravity-y", po::value<double>(&config.imu_gravity_y),
+             "gravity vector Y component (m/s^2)")
+            ("imu-gravity-z", po::value<double>(&config.imu_gravity_z),
+             "gravity vector Z component (m/s^2)")
+            ("use-isam2", po::value<bool>(&config.use_isam2),
+             "use ISAM2 incremental smoother instead of batch")
+            ("isam2-relin-skip", po::value<int>(&config.isam2_relinearize_skip),
+             "ISAM2 relinearize skip count")
+            ("isam2-relin-thresh", po::value<double>(&config.isam2_relinearize_threshold),
+             "ISAM2 relinearize threshold")
         ;
 
         po::variables_map vm;
@@ -116,6 +140,23 @@ void ConfigParser::printConfig(const SLAMConfig& config) const {
     std::cout << std::endl;
     std::cout << "Loop detection enabled: "
               << (config.loop_detection_enabled ? "yes" : "no") << std::endl;
+    std::cout << std::endl;
+    std::cout << "IMU fusion enabled: " << (config.imu_enabled ? "yes" : "no") << std::endl;
+    if (config.imu_enabled) {
+        std::cout << "IMU data path: " << config.imu_data_path << std::endl;
+        std::cout << "IMU accel noise: " << config.imu_accel_noise << std::endl;
+        std::cout << "IMU gyro noise: " << config.imu_gyro_noise << std::endl;
+        std::cout << "IMU accel bias RW: " << config.imu_accel_bias_rw << std::endl;
+        std::cout << "IMU gyro bias RW: " << config.imu_gyro_bias_rw << std::endl;
+        std::cout << "Gravity: (" << config.imu_gravity_x << ", "
+                  << config.imu_gravity_y << ", " << config.imu_gravity_z << ")" << std::endl;
+    }
+    std::cout << std::endl;
+    std::cout << "ISAM2 enabled: " << (config.use_isam2 ? "yes" : "no") << std::endl;
+    if (config.use_isam2) {
+        std::cout << "ISAM2 relinearize skip: " << config.isam2_relinearize_skip << std::endl;
+        std::cout << "ISAM2 relinearize threshold: " << config.isam2_relinearize_threshold << std::endl;
+    }
     std::cout << "========================================" << std::endl;
 }
 

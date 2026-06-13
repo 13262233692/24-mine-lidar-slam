@@ -67,6 +67,42 @@ bool MapBuilder::initialize(const SLAMConfig& config) {
     optimizer_->setMaxIterations(config.optimizer_max_iterations);
     optimizer_->setOptimizerType("levenberg_marquardt");
 
+    if (config.use_isam2) {
+        optimizer_->enableISAM2(true);
+        optimizer_->setISAM2Params(config.isam2_relinearize_skip,
+                                    config.isam2_relinearize_threshold);
+    }
+
+    if (config.imu_enabled) {
+        imu_params_.gravity = Eigen::Vector3d(
+            config.imu_gravity_x, config.imu_gravity_y, config.imu_gravity_z);
+        imu_params_.accel_noise_sigma = config.imu_accel_noise;
+        imu_params_.gyro_noise_sigma = config.imu_gyro_noise;
+        imu_params_.accel_bias_rw_sigma = config.imu_accel_bias_rw;
+        imu_params_.gyro_bias_rw_sigma = config.imu_gyro_bias_rw;
+
+        imu_preintegrator_ = std::make_shared<IMUPreintegrator>(imu_params_);
+
+        if (!config.imu_data_path.empty()) {
+            imu_source_ = PointCloudSourceFactory::createIMUSource();
+            if (imu_source_ && imu_source_->open(config.imu_data_path)) {
+                imu_source_->loadAll();
+                std::cout << "[MapBuilder] IMU data loaded: "
+                          << imu_source_->totalMeasurements() << " measurements" << std::endl;
+            } else {
+                std::cerr << "[MapBuilder] Warning: IMU data source failed to open, "
+                          << "IMU fusion will operate in prediction-only mode" << std::endl;
+            }
+        }
+
+        current_nav_state_ = NavState::fromPose3D(Pose3D());
+
+        std::cout << "[MapBuilder] IMU preintegration fusion ENABLED" << std::endl;
+        std::cout << "[MapBuilder]   gravity = (" << config.imu_gravity_x
+                  << ", " << config.imu_gravity_y << ", " << config.imu_gravity_z
+                  << ")" << std::endl;
+    }
+
     current_pose_ = Pose3D();
     last_keyframe_pose_ = Pose3D();
     processed_frames_ = 0;
@@ -167,6 +203,14 @@ bool MapBuilder::processFrame(LidarScanPtr scan) {
     KeyFramePtr last_kf = keyframes_.back();
 
     Eigen::Matrix4d initial_guess = last_kf->pose.toMatrix();
+
+    if (config_.imu_enabled && imu_preintegrator_ && !imu_preintegrator_->empty()) {
+        NavState predicted = imu_preintegrator_->predict(current_nav_state_);
+        Eigen::Matrix4d imu_guess = predicted.toPose3D().toMatrix();
+        double imu_weight = 0.3;
+        initial_guess = (1.0 - imu_weight) * initial_guess + imu_weight * imu_guess;
+    }
+
     RegistrationResult result = registerScanToKeyFrame(
         filtered_cloud, last_kf, initial_guess);
 
@@ -184,25 +228,40 @@ bool MapBuilder::processFrame(LidarScanPtr scan) {
                   << std::fixed << std::endl;
 
         if (result.degeneracy.degenerate_dimensions >= 3) {
-            std::cerr << "[MapBuilder] Severe degeneracy (" 
+            std::cerr << "[MapBuilder] Severe degeneracy ("
                       << result.degeneracy.degenerate_dimensions
                       << " dims), clamping pose to last keyframe + odometry" << std::endl;
-            
+
             Eigen::Vector3d delta_trans = current_pose_.translation - last_keyframe_pose_.translation;
             double clamp_dist = std::min(delta_trans.norm(), config_.keyframe_translation_threshold * 0.5);
             if (delta_trans.norm() > 1e-6) {
                 delta_trans = delta_trans.normalized() * clamp_dist;
             }
-            
+
             Pose3D clamped_pose;
             clamped_pose.translation = last_keyframe_pose_.translation + delta_trans;
             clamped_pose.rotation = current_pose_.rotation;
+
+            if (config_.imu_enabled && imu_preintegrator_ && !imu_preintegrator_->empty()) {
+                NavState imu_predicted = imu_preintegrator_->predict(current_nav_state_);
+                double imu_z = imu_predicted.position.z();
+                double imu_rot_z = Eigen::AngleAxisd(imu_predicted.rotation).angle();
+                clamped_pose.translation.z() = imu_z;
+                std::cerr << "[MapBuilder] IMU Z-correction applied: z=" << imu_z
+                          << " rot_z=" << imu_rot_z << std::endl;
+            }
+
             current_pose_ = clamped_pose;
         } else {
             current_pose_ = Pose3D::fromMatrix(result.transformation);
         }
     } else {
         current_pose_ = Pose3D::fromMatrix(result.transformation);
+    }
+
+    if (config_.imu_enabled) {
+        current_nav_state_.position = current_pose_.translation;
+        current_nav_state_.rotation = current_pose_.rotation;
     }
 
     TrajectoryPoint traj_point;
@@ -223,8 +282,13 @@ bool MapBuilder::processFrame(LidarScanPtr scan) {
     }
 
     if (shouldCreateKeyFrame(current_pose_, last_keyframe_pose_)) {
-        if (!addKeyFrame(scan, current_pose_)) {
+        if (!addKeyFrame(scan, current_pose_, result.degeneracy.is_degenerate)) {
             return false;
+        }
+
+        if (config_.imu_enabled && imu_preintegrator_) {
+            addIMUFactorsToGraph(keyframes_.size() >= 2 ? keyframes_[keyframes_.size()-2]->id : 0,
+                                 keyframes_.back()->id);
         }
 
         if (config_.loop_detection_enabled && keyframes_.size() > 3) {
@@ -243,9 +307,20 @@ bool MapBuilder::processFrame(LidarScanPtr scan) {
                     config_.loop_noise_z, config_.loop_noise_rot);
 
                 if (loop_closure_count_ % 5 == 0) {
-                    optimizer_->optimize();
+                    if (config_.use_isam2) {
+                        optimizer_->incrementalUpdate();
+                    } else {
+                        optimizer_->optimize();
+                    }
                     updateOptimizedPoses();
                 }
+            }
+        }
+
+        if (config_.use_isam2 && config_.imu_enabled && keyframes_.size() > 1) {
+            if (keyframes_.size() % 3 == 0) {
+                optimizer_->incrementalUpdate();
+                updateOptimizedPoses();
             }
         }
     }
@@ -253,7 +328,7 @@ bool MapBuilder::processFrame(LidarScanPtr scan) {
     return true;
 }
 
-bool MapBuilder::addKeyFrame(LidarScanPtr scan, const Pose3D& pose) {
+bool MapBuilder::addKeyFrame(LidarScanPtr scan, const Pose3D& pose, bool is_degenerate) {
     auto kf = std::make_shared<KeyFrame>();
     kf->id = keyframes_.size();
     kf->timestamp = scan->timestamp;
@@ -265,21 +340,123 @@ bool MapBuilder::addKeyFrame(LidarScanPtr scan, const Pose3D& pose) {
 
     optimizer_->addPoseEstimate(kf->id, pose);
 
+    if (config_.imu_enabled) {
+        optimizer_->addVelocityEstimate(kf->id, current_nav_state_.velocity);
+        optimizer_->addIMUBiasEstimate(kf->id, current_nav_state_.accel_bias,
+                                        current_nav_state_.gyro_bias);
+    }
+
     if (kf->id == 0) {
         optimizer_->addPriorFactor(
             0, pose,
             0.01, 0.01, 0.01, 0.001);
+
+        if (config_.imu_enabled) {
+            optimizer_->addIMUPriorFactor(
+                0,
+                current_nav_state_.velocity,
+                config_.imu_init_velocity_noise,
+                current_nav_state_.accel_bias,
+                current_nav_state_.gyro_bias,
+                1e-3);
+        }
     } else if (kf->id > 0) {
         const KeyFramePtr prev_kf = keyframes_[kf->id - 1];
         Pose3D relative = prev_kf->pose.inverse() * pose;
 
-        optimizer_->addOdometryFactor(
-            prev_kf->id, kf->id, relative,
-            config_.odometry_noise_x, config_.odometry_noise_y,
-            config_.odometry_noise_z, config_.odometry_noise_rot);
+        if (config_.imu_enabled && is_degenerate) {
+            double degraded_noise_scale = 5.0;
+            optimizer_->addOdometryFactor(
+                prev_kf->id, kf->id, relative,
+                config_.odometry_noise_x * degraded_noise_scale,
+                config_.odometry_noise_y * degraded_noise_scale,
+                config_.odometry_noise_z * degraded_noise_scale,
+                config_.odometry_noise_rot);
+            std::cerr << "[MapBuilder] Degenerate odometry: noise scaled by "
+                      << degraded_noise_scale << "x" << std::endl;
+        } else {
+            optimizer_->addOdometryFactor(
+                prev_kf->id, kf->id, relative,
+                config_.odometry_noise_x, config_.odometry_noise_y,
+                config_.odometry_noise_z, config_.odometry_noise_rot);
+        }
+    }
+
+    if (config_.imu_enabled && imu_preintegrator_) {
+        imu_preintegrator_->reset();
     }
 
     return true;
+}
+
+void MapBuilder::integrateIMUBetweenKeyFrames(uint64_t start_ts, uint64_t end_ts) {
+    if (!imu_source_ || !imu_preintegrator_) return;
+
+    auto imu_measurements = imu_source_->getMeasurementsBetween(start_ts, end_ts);
+
+    if (imu_measurements.empty()) {
+        std::cerr << "[MapBuilder] No IMU measurements between timestamps "
+                  << start_ts << " - " << end_ts << std::endl;
+        return;
+    }
+
+    imu_preintegrator_->reset();
+
+    for (size_t i = 0; i < imu_measurements.size(); ++i) {
+        double dt = 0.0;
+        if (i < imu_measurements.size() - 1) {
+            dt = static_cast<double>(
+                imu_measurements[i+1].timestamp - imu_measurements[i].timestamp) / 1e9;
+        } else if (i > 0) {
+            dt = static_cast<double>(
+                imu_measurements[i].timestamp - imu_measurements[i-1].timestamp) / 1e9;
+        } else {
+            dt = 0.005;
+        }
+
+        dt = std::max(dt, 1e-6);
+        dt = std::min(dt, 0.1);
+
+        imu_preintegrator_->integrateMeasurement(imu_measurements[i], dt);
+    }
+
+    std::cout << "[MapBuilder] IMU preintegrated: " << imu_measurements.size()
+              << " measurements, dt=" << std::fixed << std::setprecision(3)
+              << imu_preintegrator_->deltaTime() << "s" << std::endl;
+}
+
+void MapBuilder::addIMUFactorsToGraph(size_t from_kf_id, size_t to_kf_id) {
+    if (!imu_preintegrator_ || imu_preintegrator_->empty()) return;
+
+    IMUPreintegratedResult preint_result = imu_preintegrator_->compute();
+
+    optimizer_->addIMUFactor(from_kf_id, to_kf_id, preint_result, imu_params_);
+
+    optimizer_->addBiasRandomWalkFactor(from_kf_id, to_kf_id,
+                                         imu_params_.accel_bias_rw_sigma,
+                                         imu_params_.gyro_bias_rw_sigma);
+
+    std::cout << "[MapBuilder] Added IMU factor: kf " << from_kf_id
+              << " -> " << to_kf_id
+              << " (dt=" << std::fixed << std::setprecision(3)
+              << preint_result.delta_t << "s, "
+              << preint_result.num_imu_measurements << " meas)" << std::endl;
+
+    if (!config_.use_isam2) {
+        NavState predicted = imu_preintegrator_->predict(current_nav_state_);
+        publishIMUPredictedPose(predicted);
+    }
+}
+
+void MapBuilder::publishIMUPredictedPose(const NavState& predicted) {
+    const auto& p = predicted.position;
+    const auto& q = predicted.rotation;
+    const auto& v = predicted.velocity;
+
+    std::cout << "[MapBuilder] IMU predicted: pos=("
+              << std::fixed << std::setprecision(3)
+              << p.x() << "," << p.y() << "," << p.z() << ") vel=("
+              << v.x() << "," << v.y() << "," << v.z() << ")" << std::endl;
 }
 
 RegistrationResult MapBuilder::registerScanToKeyFrame(
@@ -354,8 +531,23 @@ bool MapBuilder::detectLoopClosure(KeyFramePtr current_kf,
 
 void MapBuilder::updateOptimizedPoses() {
     for (auto& kf : keyframes_) {
-        kf->pose = optimizer_->getOptimizedPose(kf->id);
+        Pose3D optimized_pose = optimizer_->getOptimizedPose(kf->id);
+        kf->pose = optimized_pose;
+
+        if (config_.imu_enabled) {
+            NavState opt_nav = optimizer_->getOptimizedNavState(kf->id);
+            current_nav_state_.velocity = opt_nav.velocity;
+            current_nav_state_.accel_bias = opt_nav.accel_bias;
+            current_nav_state_.gyro_bias = opt_nav.gyro_bias;
+        }
     }
+
+    if (config_.imu_enabled && !keyframes_.empty()) {
+        current_nav_state_.position = keyframes_.back()->pose.translation;
+        current_nav_state_.rotation = keyframes_.back()->pose.rotation;
+    }
+
+    std::cout << "[MapBuilder] Updated poses from optimizer" << std::endl;
 }
 
 std::vector<Pose3D> MapBuilder::getTrajectory() const {
@@ -410,6 +602,8 @@ void MapBuilder::saveTrajectory(const std::string& filename) const {
 
     file << "# frame_id timestamp x y z qx qy qz qw" << std::endl;
     file << "# Total frames: " << trajectory_.size() << std::endl;
+    file << "# IMU fusion: " << (config_.imu_enabled ? "enabled" : "disabled") << std::endl;
+    file << "# ISAM2: " << (config_.use_isam2 ? "enabled" : "disabled") << std::endl;
 
     for (const auto& tp : trajectory_) {
         const auto& p = tp.pose.translation;
@@ -452,6 +646,9 @@ void MapBuilder::printProgress(size_t current, size_t total) const {
               << std::fixed << std::setprecision(1) << progress << "% "
               << "(" << current << "/" << total << ") "
               << "Keyframes: " << keyframes_.size();
+    if (config_.imu_enabled) {
+        std::cout << " IMU:ON";
+    }
     std::cout.flush();
 }
 

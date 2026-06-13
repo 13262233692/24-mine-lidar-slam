@@ -48,6 +48,21 @@ struct SLAMConfig {
 
     int optimizer_max_iterations;
 
+    bool imu_enabled;
+    std::string imu_data_path;
+    double imu_accel_noise;
+    double imu_gyro_noise;
+    double imu_accel_bias_rw;
+    double imu_gyro_bias_rw;
+    double imu_gravity_x;
+    double imu_gravity_y;
+    double imu_gravity_z;
+    double imu_init_velocity_noise;
+
+    bool use_isam2;
+    int isam2_relinearize_skip;
+    double isam2_relinearize_threshold;
+
     bool save_map;
     bool save_trajectory;
     int map_downsample_step;
@@ -85,6 +100,19 @@ struct SLAMConfig {
         , loop_noise_z(0.3)
         , loop_noise_rot(0.05)
         , optimizer_max_iterations(100)
+        , imu_enabled(false)
+        , imu_data_path("")
+        , imu_accel_noise(0.01)
+        , imu_gyro_noise(0.001)
+        , imu_accel_bias_rw(0.0001)
+        , imu_gyro_bias_rw(0.00001)
+        , imu_gravity_x(0.0)
+        , imu_gravity_y(0.0)
+        , imu_gravity_z(-9.81)
+        , imu_init_velocity_noise(1.0)
+        , use_isam2(false)
+        , isam2_relinearize_skip(10)
+        , isam2_relinearize_threshold(0.1)
         , save_map(true)
         , save_trajectory(true)
         , map_downsample_step(5) {}
